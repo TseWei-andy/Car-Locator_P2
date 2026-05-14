@@ -5,8 +5,12 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
+import 'tdx_service.dart';
+import 'parking_model.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await TdxService().init();
   runApp(const MyApp());
 }
 
@@ -74,6 +78,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   bool _isLoading = false;
+  bool _isLoadingParks = false;
   DateTime? _parkingTime;
   Timer? _timer;
   Duration _elapsedDuration = Duration.zero;
@@ -81,6 +86,8 @@ class _MyHomePageState extends State<MyHomePage> {
   List<ParkingRecord> _history = [];
   final TextEditingController _noteController = TextEditingController();
   String? _currentNote;
+  List<CarPark> _nearbyParks = [];
+  String _bottomSheetTitle = '附近停車場推薦';
 
   @override
   void initState() {
@@ -374,6 +381,234 @@ class _MyHomePageState extends State<MyHomePage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _fetchOffStreetParks() async {
+    print('[主程式] ==================== 路外停車 START ====================');
+    setState(() {
+      _isLoadingParks = true;
+    });
+
+    double? userLat;
+    double? userLon;
+
+    try {
+      print('[定位] 正在取得使用者位置...');
+      final hasPermission = await _checkLocationPermission();
+      if (hasPermission) {
+        print('[定位] 有權限，呼叫 Geolocator.getCurrentPosition()');
+        Position position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        );
+        userLat = position.latitude;
+        userLon = position.longitude;
+        print('[定位] ✅ 真實座標: lat=$userLat, lon=$userLon');
+      } else {
+        print('[定位] ⚠️ 無定位權限，使用預設座標');
+        _showSnackBar('未取得定位權限，將顯示台北市中心的停車場');
+        userLat = 25.0375;
+        userLon = 121.5645;
+      }
+    } catch (e) {
+      print('[定位] ❌ 失敗: $e，使用預設座標');
+      _showSnackBar('定位失敗，將顯示台北市中心的停車場');
+      userLat = 25.0375;
+      userLon = 121.5645;
+    }
+
+    print('[主程式] 即將傳入的座標: ($userLat, $userLon)');
+    print('[主程式] 開始呼叫 TdxService.fetchOffStreetParking...');
+    _showSnackBar('訪客模式每日僅限 20 次，若次數耗盡請填入金鑰');
+    try {
+      final parks = await TdxService().fetchOffStreetParking(userLat: userLat, userLon: userLon);
+      print('[主程式] TDX 回傳 ${parks.length} 筆停車場');
+      setState(() {
+        _nearbyParks = List<CarPark>.from(parks);
+        _bottomSheetTitle = '附近停車場推薦';
+        _isLoadingParks = false;
+      });
+      if (parks.isEmpty) {
+        print('[主程式] 警告：停車場清單為空');
+        _showSnackBar('附近查無停車場');
+      } else {
+        _showParkingBottomSheet();
+      }
+    } catch (e) {
+      print('[主程式] ❌ 載入停車場失敗: $e');
+      setState(() {
+        _isLoadingParks = false;
+      });
+      _showSnackBar('載入停車場失敗: $e');
+    }
+    print('[主程式] ==================== 路外停車 END ====================');
+  }
+  
+  Future<void> _fetchOnStreetParks() async {
+    print('[主程式] ==================== 路邊停車 START ====================');
+    setState(() {
+      _isLoadingParks = true;
+    });
+
+    double? userLat;
+    double? userLon;
+
+    try {
+      print('[定位] 正在取得使用者位置...');
+      final hasPermission = await _checkLocationPermission();
+      if (hasPermission) {
+        print('[定位] 有權限，呼叫 Geolocator.getCurrentPosition()');
+        Position position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        );
+        userLat = position.latitude;
+        userLon = position.longitude;
+        print('[定位] ✅ 真實座標: lat=$userLat, lon=$userLon');
+      } else {
+        print('[定位] ⚠️ 無定位權限，使用預設座標');
+        _showSnackBar('未取得定位權限，將顯示台北市中心的停車場');
+        userLat = 25.0375;
+        userLon = 121.5645;
+      }
+    } catch (e) {
+      print('[定位] ❌ 失敗: $e，使用預設座標');
+      _showSnackBar('定位失敗，將顯示台北市中心的停車場');
+      userLat = 25.0375;
+      userLon = 121.5645;
+    }
+
+    print('[主程式] 即將傳入的座標: ($userLat, $userLon)');
+    print('[主程式] 開始呼叫 TdxService.fetchOnStreetParking...');
+    _showSnackBar('訪客模式每日僅限 20 次，若次數耗盡請填入金鑰');
+    try {
+      final parks = await TdxService().fetchOnStreetParking(userLat: userLat, userLon: userLon);
+      print('[主程式] TDX 回傳 ${parks.length} 筆停車場');
+      setState(() {
+        _nearbyParks = List<CarPark>.from(parks);
+        _bottomSheetTitle = '附近路邊停車推薦';
+        _isLoadingParks = false;
+      });
+      if (parks.isEmpty) {
+        print('[主程式] 警告：停車場清單為空');
+        _showSnackBar('附近查無路邊停車');
+      } else {
+        _showParkingBottomSheet();
+      }
+    } catch (e) {
+      print('[主程式] ❌ 載入停車場失敗: $e');
+      setState(() {
+        _isLoadingParks = false;
+      });
+      _showSnackBar('載入停車場失敗: $e');
+    }
+    print('[主程式] ==================== 路邊停車 END ====================');
+  }
+
+  Future<bool> _checkLocationPermission() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      return false;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        return false;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      return false;
+    }
+    return true;
+  }
+
+  void _showParkingBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[600],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _bottomSheetTitle,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _nearbyParks.length,
+                itemBuilder: (context, index) {
+                  final park = _nearbyParks[index];
+                  return ListTile(
+                    title: Text(
+                      park.name,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          park.address,
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                        Text(
+                          park.fareDescription,
+                          style: const TextStyle(color: Colors.grey, fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                    trailing: park.distance != null
+                        ? Text(
+                            '${park.distance!.toStringAsFixed(2)} km',
+                            style: const TextStyle(
+                              color: Colors.lightGreenAccent,
+                              fontSize: 12,
+                            ),
+                          )
+                        : null,
+                    onTap: () => _navigateToPark(park),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _navigateToPark(CarPark park) async {
+    final Uri uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=${park.lat},${park.lon}',
+    );
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      _showSnackBar('無法開啟地圖');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -452,6 +687,28 @@ class _MyHomePageState extends State<MyHomePage> {
                           color: Colors.green,
                           onPressed: _navigateToCar,
                         ),
+                        
+                        const SizedBox(height: 20),
+                        
+                        _isLoadingParks
+                            ? const CircularProgressIndicator()
+                            : Column(
+                                children: [
+                                  _buildBigButton(
+                                    icon: Icons.domain,
+                                    label: '找尋-附近停車場',
+                                    color: Colors.orange,
+                                    onPressed: _fetchOffStreetParks,
+                                  ),
+                                  const SizedBox(height: 20),
+                                  _buildBigButton(
+                                    icon: Icons.add_road,
+                                    label: '找尋-附近路邊停車',
+                                    color: Colors.teal,
+                                    onPressed: _fetchOnStreetParks,
+                                  ),
+                                ],
+                              ),
                         
                         const SizedBox(height: 30),
                         
@@ -622,7 +879,7 @@ class _MyHomePageState extends State<MyHomePage> {
     required VoidCallback onPressed
   }) {
     return SizedBox(
-      width: 250,
+      width: 330,
       height: 100,
       child: ElevatedButton.icon(
         style: ElevatedButton.styleFrom(
@@ -632,7 +889,12 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
         onPressed: onPressed,
         icon: Icon(icon, size: 40),
-        label: Text(label, style: const TextStyle(fontSize: 24)),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 24),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
     );
   }
