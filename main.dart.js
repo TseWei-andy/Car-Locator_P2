@@ -40376,7 +40376,7 @@ s=p}for(;;)switch(s){case 0:A.be("[TDX] ==================== \u8def\u5916\u505c\
 A.be("[TDX] \u4f7f\u7528\u8005\u5ea7\u6a19\u50b3\u5165: lat="+A.j(a)+", lon="+A.j(b))
 m=A.c([],t.ew)
 p=4
-l="https://tdx.transportdata.tw/api/basic/v1/Parking/OffStreet/CarPark/City/Taipei?$format=JSON"
+l="https://tdx.transportdata.tw/api/basic/v1/Parking/OffStreet/CarPark/City/Taoyuan?$format=JSON"
 A.be("[TDX] \u8def\u5916\u505c\u8eca API URL: "+A.j(l))
 s=7
 return A.H(A.as7(A.eq(l,0,null),null),$async$yt)
@@ -40429,7 +40429,7 @@ s=p}for(;;)switch(s){case 0:A.be("[TDX] ==================== \u8def\u908a\u505c\
 A.be("[TDX] \u4f7f\u7528\u8005\u5ea7\u6a19\u50b3\u5165: lat="+A.j(a)+", lon="+A.j(b))
 m=A.c([],t.ew)
 p=4
-l="https://tdx.transportdata.tw/api/basic/v1/Parking/OnStreet/ParkingSegment/City/Taipei?$format=JSON"
+l="https://tdx.transportdata.tw/api/basic/v1/Parking/OnStreet/ParkingSegment/City/Taoyuan?$format=JSON"
 A.be("[TDX] \u8def\u908a\u505c\u8eca API URL: "+A.j(l))
 s=7
 return A.H(A.as7(A.eq(l,0,null),null),$async$yu)
